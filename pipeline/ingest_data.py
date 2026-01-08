@@ -4,6 +4,8 @@
 
 import pandas as pd 
 
+import click
+
 from sqlalchemy import create_engine
 
 from tqdm.auto import tqdm
@@ -36,42 +38,40 @@ parse_dates = [
 
 
 
-def run ():
-    pg_user = "root"
-    pg_pass = "root"
-    pg_host = "localhost"
-    pg_dp = "ny_taxi"
-    pg_port=5432
-
-    year = 2021
-    month = 1
-    target_table = "yellow_taxi_data"
-    chunksize = 100000
-    
-    
-    prefix = 'https://github.com/DataTalksClub/nyc-tlc-data/releases/download/yellow/'
+@click.command()
+@click.option("--pg-user", default="root", show_default=True, help="Postgres user")
+@click.option("--pg-pass", default="root", show_default=True, help="Postgres password")
+@click.option("--pg-host", default="localhost", show_default=True, help="Postgres host")
+@click.option("--pg-db", "pg_dp", default="ny_taxi", show_default=True, help="Postgres database")
+@click.option("--pg-port", default=5432, show_default=True, type=int, help="Postgres port")
+@click.option("--year", default=2021, show_default=True, type=int, help="Year of data")
+@click.option("--month", default=1, show_default=True, type=int, help="Month of data (1-12)")
+@click.option("--target-table", default="yellow_taxi_data", show_default=True, help="Target table name")
+@click.option("--chunksize", default=100000, show_default=True, type=int, help="Number of rows per chunk")
+def run(pg_user, pg_pass, pg_host, pg_dp, pg_port, year, month, target_table, chunksize):
+    """
+    Ingest NYC taxi data into Postgres.
+    """
+    prefix = 'https://github.com/DataTalksClub/nyc-tlc-data/releases/download/yellow'
     url = f"{prefix}/yellow_tripdata_{year}-{month:02d}.csv.gz"
     engine = create_engine(f'postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_dp}')
-    
 
-
-    df_iter = pd.read_csv( 
-                      url,
-                      dtype=dtype,
-                      parse_dates=parse_dates,
-                      iterator=True,
-    chunksize=chunksize)
-
+    df_iter = pd.read_csv(
+        url,
+        dtype=dtype,
+        parse_dates=parse_dates,
+        iterator=True,
+        chunksize=chunksize,
+    )
 
     first = True
     for df_chunk in tqdm(df_iter):
         if first:
-            df_chunk.head(0).to_sql (name=target_table, con=engine ,if_exists='replace')
+            df_chunk.head(0).to_sql(name=target_table, con=engine, if_exists='replace')
             first = False
-        df_chunk.to_sql ( name=target_table, con=engine ,if_exists='append')
+        df_chunk.to_sql(name=target_table, con=engine, if_exists='append')
 
 
-
-if __name__ == "__main__" :
+if __name__ == "__main__":
     run()
 
