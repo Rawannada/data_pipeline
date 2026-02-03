@@ -1,4 +1,5 @@
 services:
+  # 1. قاعدة بيانات المشروع (لبيانات التاكسي)
   pgdatabase:
     image: postgres:18
     environment:
@@ -6,10 +7,11 @@ services:
       - POSTGRES_PASSWORD=root
       - POSTGRES_DB=ny_taxi
     volumes:
-      - "ny_taxi_postgres_data:/var/lib/postgresql/data"
+      - "ny_taxi_postgres_data:/var/lib/postgresql" # المسار الصح لنسخة 18
     ports:
       - "5432:5432"
 
+  # 2. أداة إدارة القاعدة (pgAdmin)
   pgadmin:
     image: dpage/pgadmin4
     environment:
@@ -19,7 +21,10 @@ services:
       - "pgadmin_data:/var/lib/pgadmin"
     ports:
       - "8085:80"
+    depends_on:
+      - pgdatabase
 
+  # 3. سكربت البايثون (شغل مديول 1)
   taxi_ingest:
     build:
       context: .
@@ -36,7 +41,63 @@ services:
       - --year=2021
       - --month=1
 
+  # 4. قاعدة بيانات كسترا (المدير)
+  kestra_postgres:
+    image: postgres:18
+    volumes:
+      - kestra_postgres_data:/var/lib/postgresql # المسار الصح لنسخة 18
+    environment:
+      - POSTGRES_DB=kestra
+      - POSTGRES_USER=kestra
+      - POSTGRES_PASSWORD=k3str4
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $$POSTGRES_DB -U $$POSTGRES_USER"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 5. برنامج كسترا نفسه (Kestra Orchestrator)
+  kestra:
+    image: kestra/kestra:v1.1
+    pull_policy: always
+    user: "root"
+    command: server standalone
+    volumes:
+      - kestra_data:/app/storage
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/kestra-wd:/tmp/kestra-wd
+    environment:
+      KESTRA_CONFIGURATION: |
+        datasources:
+          postgres:
+            url: jdbc:postgresql://kestra_postgres:5432/kestra
+            driverClassName: org.postgresql.Driver
+            username: kestra
+            password: k3str4
+        kestra:
+          server:
+            basicAuth:
+              username: "admin@kestra.io"
+              password: Admin1234!
+          repository:
+            type: postgres
+          storage:
+            type: local
+            local:
+              basePath: "/app/storage"
+          queue:
+            type: postgres
+          tasks:
+            tmpDir:
+              path: /tmp/kestra-wd/tmp
+    ports:
+      - "8080:8080"
+    depends_on:
+      kestra_postgres:
+        condition: service_healthy
 
 volumes:
   ny_taxi_postgres_data:
   pgadmin_data:
+  kestra_postgres_data:
+  kestra_data:
