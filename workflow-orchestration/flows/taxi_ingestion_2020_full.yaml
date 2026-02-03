@@ -1,0 +1,51 @@
+id: taxi_ingest_flow
+namespace: dev
+
+tasks:
+  - id: python_ingest
+    type: io.kestra.plugin.scripts.python.Script
+    taskRunner:
+      type: io.kestra.plugin.core.runner.Process
+    beforeCommands:
+      - pip install pandas sqlalchemy psycopg2-binary requests
+    script: |
+      import pandas as pd
+      from sqlalchemy import create_engine
+      import time
+
+      engine = create_engine('postgresql://root:root@pgdatabase:5432/ny_taxi')
+
+      # الأنواع والشهور المطلوبة
+      taxi_types = ['yellow', 'green']
+      years = ['2020']
+      months = [f"{i:02d}" for i in range(1, 13)] # بيعمل ليسته ['01', '02' ... '12']
+
+      for taxi in taxi_types:
+          table_name = f"{taxi}_taxi_data"
+          print(f"\n--- Starting {taxi} taxi for year 2020 ---")
+          
+          for month in months:
+              url = f"https://github.com/DataTalksClub/nyc-tlc-data/releases/download/{taxi}/{taxi}_tripdata_2020-{month}.csv.gz"
+              print(f"Downloading: {url}")
+              
+              try:
+                  # قراءة الداتا chunks عشان الجهاز ميهنجش
+                  chunk_iter = pd.read_csv(url, compression='gzip', chunksize=100000, low_memory=False)
+                  
+                  for i, chunk in enumerate(chunk_iter):
+                      # لو أول شهر وأول حتة، بنعمل replace عشان ننضف الجدول القديم
+                      # غير كدة بنعمل append عشان نجمع الـ 12 شهر فوق بعض
+                      if taxi == 'yellow' and month == '01' and i == 0:
+                          mode = 'replace'
+                      elif taxi == 'green' and month == '01' and i == 0:
+                          mode = 'replace'
+                      else:
+                          mode = 'append'
+                      
+                      chunk.to_sql(name=table_name, con=engine, if_exists=mode, index=False)
+                      
+                  print(f"✅ Successfully loaded {taxi} 2020-{month}")
+              except Exception as e:
+                  print(f"❌ Error loading {url}: {e}")
+
+      print("\n🚀 ALL 24 FILES ARE LOADED INTO POSTGRES!")
