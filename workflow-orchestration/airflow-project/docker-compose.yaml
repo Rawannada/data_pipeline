@@ -49,8 +49,7 @@ services:
       - _AIRFLOW_WWW_USER_USERNAME=airflow
       - _AIRFLOW_WWW_USER_PASSWORD=airflow
     command: >
-      bash -c "airflow db init &&
-      airflow users create --username airflow --password airflow --firstname Admin --lastname Admin --role Admin --email admin@example.com"
+      bash -c "airflow db init && airflow users create --username airflow --password airflow --firstname Admin --lastname Admin --role Admin --email admin@example.com"
 
   # واجهة مستخدم Airflow
   airflow-webserver:
